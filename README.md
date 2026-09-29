@@ -31,11 +31,13 @@ redistributed; supply your own legally-dumped copy.
 |-------------------|-------------------------------|--------------------------------------------|------------|
 | `Mother3Recomp`   | MOTHER 3 (Japan)              | `4f0f493e12c2a8c61b2d809af03f7abf87a85776` | 19893      |
 | `Mother3RecompEN` | MOTHER 3 (English fan patch)  | `306fb8874533b0fd0796208faa8bed2db4ae77fb` | 19894      |
+| `Mother3RecompES` | MOTHER 3 (Spanish fan patch)  | `f56db7a401f4796e6f99f08d52707cd0a34665d3` | 19895 |
 
 The runtime refuses to launch on an unrecognized ROM.
 
-ROM locations: `variants/mother3/roms/mother3_jpn.gba` and
-`variants/mother3en/roms/mother3_en.gba` (gitignored).
+ROM locations: `variants/mother3/roms/mother3_jpn.gba`,
+`variants/mother3en/roms/mother3_en.gba`, and
+`variants/mother3es/roms/mother3_es.gba` (gitignored).
 
 ## Controls
 
@@ -65,8 +67,11 @@ toolchain, CMake 3.20+, Ninja, and SDL2 (mingw64 package). Run builds from
 PowerShell with mingw64 on `PATH`.
 
 ```
-git clone --recurse-submodules <this repo> Mother3Recomp
+git clone <this repo> Mother3Recomp
 cd Mother3Recomp
+git submodule update --init gbarecomp recomp-ui
+git -C gbarecomp config submodule.external/arm-recomp-core.url https://github.com/mstan/arm-recomp-core.git
+git -C gbarecomp submodule update --init external/arm-recomp-core
 cmake -S . -B build -G Ninja
 cmake --build build --target Mother3RecompEN     # or Mother3Recomp
 ```
@@ -88,6 +93,34 @@ gba_recompile --rom roms/mother3_en.gba \
 
 `gba_recompile` is built from the `gbarecomp` submodule. The generated corpus
 is large — expect a multi-minute compile.
+
+For `Mother3RecompES`, place your Spanish patched ROM at
+`variants/mother3es/roms/mother3_es.gba`. On Windows, run
+`./tools/build.ps1 -Target Mother3RecompES -Regen` from PowerShell.
+On Linux, generate the code and build with:
+
+```
+cmake --build build --target gba_recompile
+(cd gbarecomp && ../build/gbarecomp_build/gba_recompile \
+    --bios bios/gba_bios.bin --config bios/gba_bios.toml)
+cmake -S . -B build -G Ninja
+(cd variants/mother3es && ../../build/gbarecomp_build/gba_recompile \
+    --rom roms/mother3_es.gba --config game.toml \
+    --config symbols/mother3_jpn.toml \
+    --symbols ../mother3en/symbols/imported_symbols.tsv \
+    --data-symbols ../mother3en/symbols/imported_data_symbols.tsv \
+    --out generated --max-functions 65536)
+cmake --build build --target Mother3RecompES
+```
+
+The Spanish variant shares JP/EN symbol addresses. A 3,000-frame headless
+run reached a Spanish naming screen, with three interpreter-bridged RAM PCs;
+full gameplay and static coverage still need validation. ROMs, BIOS files,
+and generated code are not part of this repository.
+
+The submodule commands above use the public `mstan/arm-recomp-core` mirror
+because the fork's original ARM core URL is unavailable. Git still checks
+out the exact core revision pinned by `gbarecomp`.
 
 ## License
 

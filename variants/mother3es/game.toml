@@ -1,0 +1,159 @@
+# game.toml — MOTHER 3 (GBA), Spanish patched ROM
+#
+# Paths resolve relative to THIS file's directory (variants/mother3es/),
+# per runtime.cpp resolve_config_path.
+#
+# Based on the English variant. The shared symbol tables describe the
+# Japanese code layout; runtime coverage must validate Spanish patch changes.
+
+[game]
+name           = "MOTHER 3"
+short_name     = "mother3es"
+default_region = "es"   # loads config/mother3es_es.toml
+
+[bios]
+path = "../../gbarecomp/bios/gba_bios.bin"   # override via --bios
+sha1 = "300c20df6731a33952ded8c436f7f186d25d3492"
+# The recompiled (LLE) real BIOS is the default and the correctness oracle.
+# HLE is opt-in and skips the boot intro; uncomment only if the real BIOS
+# is giving you trouble during bring-up.
+# hle            = true
+# hle_keep_intro = false
+
+[rom]
+path = "roms/mother3_es.gba"   # user-provided; gitignore this
+# SHA-1 is also specified by the region override below.
+
+# ── Recompiler program identity (consumed by gba_recompile) ─────────
+#
+# This file is the BASE config: it owns [program] and [identity] and wins
+# over the overlay in symbols/mother3_jpn.toml. The symbol addresses are
+# inherited from JP/EN; keep the Spanish identity separate.
+[program]
+name         = "MOTHER 3 (ES)"
+id           = "mother3es"
+load_address = 0x08000000        # VERIFIED — ld_script.ld rom ORIGIN
+size         = 0x02000000
+
+entry_pc     = 0x08000000
+codegen_shards = 128             # CHECK — Emerald uses 64 for a 16 MB ROM;
+                                 # doubled for the 32 MB cart. Raise if the
+                                 # per-shard compile blows out your RAM.
+# Emit a native resume entry at every instruction boundary so an IRQ or SWI
+# return never needs the interpreter or the self-heal path.
+static_resume_all = true
+
+[identity]
+sha1 = "f56db7a401f4796e6f99f08d52707cd0a34665d3"   # supplied Spanish ROM
+
+[recompiler]
+entry_point   = "0x08000000"
+seeds         = "../mother3en/symbols/imported_symbols.tsv"
+boundaries    = "../mother3en/symbols/function_boundaries.tsv"
+out_dir       = "generated"
+strict        = true
+
+[save]
+type = "flash512"                # 64 KB. Runs and round-trips saves in practice.
+                                 # CHECK: the decomp builds an agb_sram driver,
+                                 # which hints at SRAM; if saves ever misbehave,
+                                 # this is the first value to question.
+
+[runtime]
+debug_port    = 19895
+window_title  = "Mother3Recomp_ES"
+
+# Functions the analyzer should be told about explicitly, by mode.
+# Leave empty at first; populate only if the fallback census shows
+# entry points the symbol import missed.
+[functions]
+arm   = []
+thumb = []
+
+# ── IWRAM code copies (hand-verified 2026-09-24) ─────────────────────
+# Found from two save states (overworld + battle): the IWRAM bytes at each
+# runtime address match the ROM source exactly, and the ROM holds a literal
+# (source, destination) pair for each copy. The Spanish ROM has matching
+# literal pairs at these offsets; copied bytes still need runtime validation.
+# These were self-heal misses that the JIT could not lower, so they ran on
+# the interpreter every time.
+
+[[code_copy]]
+runtime_start = 0x03002EF0
+source_start  = 0x080000FC
+size          = 0x800
+name          = "iwram_irq_core"
+note          = "DMA3 copy at 0x0800089C (CNT 0x84000200 = 0x200 words); IRQ handler area"
+
+[[code_copy]]
+runtime_start = 0x03004C14
+source_start  = 0x0803D59C
+size          = 0x100
+name          = "iwram_func_0803D59C"
+note          = "literal pair at 0x08032F7C"
+
+[[code_copy]]
+runtime_start = 0x03004D14
+source_start  = 0x0803D5EC
+size          = 0x100
+name          = "iwram_func_0803D5EC"
+note          = "literal pair at 0x08032F84"
+
+[[code_copy]]
+runtime_start = 0x03005714
+source_start  = 0x080566C8
+size          = 0x100
+name          = "iwram_func_080566C8"
+note          = "literal pair at 0x08050D78"
+
+[[extra_func]]
+addr = 0x03002EF0
+mode = "arm"
+note = "self-heal miss (bridged x2359)"
+
+[[extra_func]]
+addr = 0x03003004
+mode = "arm"
+note = "self-heal miss (bridged x387)"
+
+[[extra_func]]
+addr = 0x03004C14
+mode = "thumb"
+note = "self-heal miss (bridged x612)"
+
+[[extra_func]]
+addr = 0x03004D14
+mode = "thumb"
+note = "copied function entry (literal pair at 0x08032F84)"
+
+[[extra_func]]
+addr = 0x03005714
+mode = "thumb"
+note = "self-heal miss (bridged x350)"
+
+# NOT declared: the 17 misses at 0x03006C1C..0x03006D80. Those bytes are not
+# in ROM (a pointer table in one state, zeros in the other), so that code is
+# built or decompressed at runtime and has to stay on the interpreter/JIT.
+
+# ── Moved from the old importer overlay (2026-09-24) ─────────────────
+# The current decomp build exports SoundMainRAM_Buffer with size 0, so the
+# importer can no longer derive this copy or the header data range. They live
+# here in the hand-authored base config so symbol re-imports cannot drop them.
+
+[[code_copy]]
+runtime_start = 0x03000000
+source_start  = 0x0808ED80
+size          = 0x800
+name          = "SoundMainRAM_Buffer"
+note          = "m4a SoundMainRAM (ROM 0x0808ED81 thumb, 932 bytes) copied to IWRAM"
+
+[[extra_func]]
+addr = 0x03000000
+mode = "thumb"
+name = "soundmainram_buffer_iwram"
+note = "IWRAM-resident copy of SoundMainRAM"
+
+[[data_range]]
+start = 0x08000004
+end   = 0x080000C0
+note  = "cartridge header (logo, title, checksums)"

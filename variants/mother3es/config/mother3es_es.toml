@@ -1,0 +1,6 @@
+# Region override for the supplied Spanish-patched MOTHER 3 ROM.
+[rom]
+sha1 = "f56db7a401f4796e6f99f08d52707cd0a34665d3"
+
+[save]
+type = "flash512"
