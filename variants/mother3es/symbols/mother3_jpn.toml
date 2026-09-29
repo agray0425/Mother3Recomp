@@ -1,0 +1,4 @@
+# Identity overlay for the Spanish ROM. Symbol tables are shared with
+# mother3en; this file carries no address-specific entries.
+[identity]
+sha1 = "f56db7a401f4796e6f99f08d52707cd0a34665d3"

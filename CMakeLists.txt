@@ -21,6 +21,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 #   Target            Game                     ROM       Debug port
 #   Mother3Recomp     MOTHER 3 (JPN)           4f0f493e  19893
 #   Mother3RecompEN   MOTHER 3 (EN fan patch)  306fb887  19894
+#   Mother3RecompES   MOTHER 3 (ES patch)      f56db7a4  19895
 # ─────────────────────────────────────────────────────────────────────
 
 set(GBARECOMP_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/gbarecomp"
@@ -127,6 +128,10 @@ function(add_gba_variant TARGET NAME PORT WIN_TITLE GAME_NAME ROM_SHA1 ROM_CRC32
         GBARECOMP_BUILTIN_CRC32=${ROM_CRC32}
         GBARECOMP_BUILTIN_REGION="USA")
 
+    if(NAME MATCHES "^mother3")
+        target_compile_definitions(${TARGET} PRIVATE GBARECOMP_MOTHER3_VARIANT=1)
+    endif()
+
     if(GBAGAME_RECOMP_UI)
         target_link_libraries(${TARGET} PRIVATE game_launcher_ui)
         # Per-variant box art: variants share one build dir, so each stages
@@ -189,3 +194,6 @@ add_gba_variant(Mother3Recomp mother3 19893 "Mother3Recomp"
 
 add_gba_variant(Mother3RecompEN mother3en 19894 "Mother3Recomp (EN)"
     "MOTHER 3 (EN)" "306FB8874533B0FD0796208FAA8BED2DB4AE77FB" 0x8A3BC5A8)
+
+add_gba_variant(Mother3RecompES mother3es 19895 "Mother3Recomp (ES)"
+    "MOTHER 3 (ES)" "f56db7a401f4796e6f99f08d52707cd0a34665d3" 0xE70A1472)
