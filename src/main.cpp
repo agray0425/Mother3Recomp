@@ -16,6 +16,7 @@
 // All three are optional on the command line; missing values are pulled
 // from game.toml. Hashes are verified before any code runs.
 
+#include <cstdint>
 #include <cstdio>
 #include <cstring>
 #include <string>
@@ -24,9 +25,6 @@
 #include "runtime.h"
 #include "runtime_arm.h"
 #include "emerald_extended_view.h"
-
-extern "C" void gf_ReadFlash1(void);
-extern "C" void gf_ReadFlash_Core(void);
 
 #ifndef GBARECOMP_BUILTIN_NAME
 #define GBARECOMP_BUILTIN_NAME "GBA cartridge"
@@ -53,34 +51,58 @@ extern "C" void gf_ReadFlash_Core(void);
 
 namespace {
 
-bool ram_matches_rom(uint32_t ram_pc, uint32_t rom_pc, uint32_t size) {
-    for (uint32_t offset = 0; offset < size; ++offset) {
-        if (bus_read_u8(ram_pc + offset) != bus_read_u8(rom_pc + offset)) {
-            return false;
-        }
+// MOTHER 3's FLASH512_V131 library runs its flash-reading routines from a
+// buffer on the stack (code that reads flash may not run from the cartridge
+// bus), copying them there on every call:
+//   ReadFlash1       0x080911D4, 4 bytes (ldrb r0,[r0]; bx lr), copied by
+//                    0x080911D8 and called through the pointer at 0x02015E14
+//                    by the write/erase status polls, thousands of times per save
+//   ReadFlash_Core   0x08091218, 0x24 bytes, copied by 0x0809123C
+//   VerifyFlash_Core 0x080912D8, 0x30 bytes, copied by 0x0809130A, 0x080913A2
+// The slot moves with the call depth and is reused for other data, so fixed
+// RAM entries would be unsafe, and every call ran on the interpreter bridge,
+// as did every IRQ return into a loop (the library times flash operations
+// with a timer IRQ): ~20 PCs at 0x03006C1C..0x03006D80 and about a million
+// interpreted instructions per save. The routines are position independent,
+// so a RAM PC inside a byte-exact copy runs the static translation of the ROM
+// routine at the same offset (static_resume_all gives every instruction an
+// entry). ReadFlash1 is too short to identify by its bytes alone and must
+// also be the copy the library's pointer names. Anything else falls through
+// to normal dispatch. Same idea as EmeraldRecomp's ReadFlash1/ReadFlash_Core
+// hook, plus mid-routine resumes.
+struct StackRoutine {
+    uint32_t rom;
+    uint32_t size;
+    uint32_t live_pointer;  // holds (copy | 1) while the copy is live; 0 = none
+};
+constexpr StackRoutine kFlashStackRoutines[] = {
+    {0x080911D4u, 0x04u, 0x02015E14u},  // ReadFlash1
+    {0x08091218u, 0x24u, 0u},           // ReadFlash_Core
+    {0x080912D8u, 0x30u, 0u},           // VerifyFlash_Core
+};
+
+bool ram_matches_rom(uint32_t ram, uint32_t rom, uint32_t size) {
+    for (uint32_t i = 0; i < size; i += 2) {
+        if (bus_read_u16(ram + i) != bus_read_u16(rom + i)) return false;
     }
     return true;
 }
 
-// Emerald copies two position-independent flash routines from ROM to moving
-// stack slots. Fixed RAM dispatch aliases would be unsafe because those slots
-// are reused. Canonicalize only byte-for-byte matches against the hash-gated
-// ROM routines; ReadFlash1 additionally has a stable live callback pointer.
-int emerald_ram_dispatch(uint32_t pc, int thumb) {
-    constexpr uint32_t kReadFlash1Rom = 0x082E1A6Cu;
-    constexpr uint32_t kReadFlash1Callback = 0x03007844u;
-    constexpr uint32_t kReadFlashCoreRom = 0x082E1AB0u;
-    constexpr uint32_t kReadFlashCoreSize = 0x22u;
-
-    if (!thumb) return 0;
-    if (bus_read_u32(kReadFlash1Callback) == (pc | 1u) &&
-        ram_matches_rom(pc, kReadFlash1Rom, 4u)) {
-        gf_ReadFlash1();
-        return 1;
-    }
-    if (ram_matches_rom(pc, kReadFlashCoreRom, kReadFlashCoreSize)) {
-        gf_ReadFlash_Core();
-        return 1;
+int mother3_ram_dispatch(uint32_t pc, int thumb) {
+    pc &= ~1u;
+    if (!thumb || pc < 0x03000000u || pc >= 0x03008000u) return 0;
+    const uint16_t opcode = bus_read_u16(pc);
+    for (const StackRoutine& routine : kFlashStackRoutines) {
+        for (uint32_t offset = 0; offset < routine.size; offset += 2) {
+            const uint32_t copy = pc - offset;
+            if (opcode != bus_read_u16(routine.rom + offset) ||
+                (routine.live_pointer &&
+                 bus_read_u32(routine.live_pointer) != (copy | 1u)) ||
+                !ram_matches_rom(copy, routine.rom, routine.size))
+                continue;
+            runtime_dispatch(routine.rom + offset);
+            return 1;
+        }
     }
     return 0;
 }
@@ -109,7 +131,7 @@ int main(int argc, char** argv) {
         }
     }
 
-    g_runtime_ram_dispatch_hook = &emerald_ram_dispatch;
+    g_runtime_ram_dispatch_hook = &mother3_ram_dispatch;
 
     // Built-in defaults so a standalone <Variant>Recomp.exe ships without
     // a sibling game.toml. The asset picker still validates against these

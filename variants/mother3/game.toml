@@ -130,9 +130,13 @@ addr = 0x03005714
 mode = "thumb"
 note = "self-heal miss (bridged x350)"
 
-# NOT declared: the 17 misses at 0x03006C1C..0x03006D80. Those bytes are not
-# in ROM (a pointer table in one state, zeros in the other), so that code is
-# built or decompressed at runtime and has to stay on the interpreter/JIT.
+# NOT declared: the misses at 0x03006C1C..0x03006D80. They are the FLASH512
+# library's ReadFlash1 / ReadFlash_Core / VerifyFlash_Core, copied from ROM to
+# a stack buffer on every call (hence a pointer table in one state, zeros in
+# the other). The slot moves, so a fixed entry here would be unsafe;
+# mother3_ram_dispatch in src/main.cpp runs byte-verified copies through the
+# ROM routines' static translations instead. Verified on the EN ROM (FULLY_STATIC
+# with in-game saves); the JP symbols list the routines at the same addresses.
 
 # ── Moved from the old importer overlay (2026-09-24) ─────────────────
 # The current decomp build exports SoundMainRAM_Buffer with size 0, so the
