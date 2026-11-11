@@ -93,6 +93,10 @@ function(add_gba_variant TARGET NAME PORT WIN_TITLE GAME_NAME ROM_SHA1 ROM_CRC32
         ${VARIANT_ICON_OBJS}
         ${VARIANT_GENERATED})
 
+    if("${NAME}" STREQUAL "emerald")
+        target_compile_definitions(${TARGET} PRIVATE GBARECOMP_VARIANT_EMERALD=1)
+    endif()
+
     # Keep generated guest translation units at a bounded optimization and
     # debug-info cost. gba_recompile emits stable recompiled_NNN.cpp shards.
     set(VARIANT_RECOMPILED_SOURCES ${VARIANT_GENERATED})
